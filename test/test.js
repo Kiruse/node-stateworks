@@ -65,3 +65,44 @@ it('should support scopes', function(done) {
 	assert.strictEqual(stateful.foo(), ':O');
 	done();
 });
+
+it('should support shared properties', function(done) {
+	var stateful = new Stateful((interface) => {
+		interface.addStates({
+			start: {
+				foo (enter) {
+					this.status = 'start';
+					enter('intermediate');
+				}
+			},
+			intermediate: {
+				foo (enter) {
+					this.status = 'intermediate';
+					enter('final');
+				}
+			},
+			final: {
+				foo (enter) {
+					this.status = 'final';
+				}
+			},
+		})
+		.setCommon({
+			status: 'unknown'
+		})
+		.enter('start');
+	});
+	
+	assert.strictEqual(stateful.status, 'unknown');
+	
+	stateful.foo();
+	assert.strictEqual(stateful.status, 'start');
+	
+	stateful.foo();
+	assert.strictEqual(stateful.status, 'intermediate');
+	
+	stateful.foo();
+	assert.strictEqual(stateful.status, 'final');
+	
+	done();
+});

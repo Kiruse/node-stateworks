@@ -25,17 +25,11 @@ function Stateful(base, callback) {
 
 Object.assign(Stateful.prototype, {
     proxy: null, // Filled during construction.
-    scope: null,
     states: {},
     common: {}, // Properties shared across states. These have highest priority.
     currentState: undefined,
     defaultState: undefined,
     transitionHandler (){},
-    
-    bind (scope) {
-        this.scope = scope;
-        return this;
-    },
     
     setCommon (properties) {
         if (typeof properties === 'object') {
@@ -107,7 +101,7 @@ const traps = {
         
         // Functions need to be rebound to the stateful or the stateful's target scope!
         function alter(fn) {
-            return typeof fn !== 'function' ? fn : fn.bind(stateful.scope || target, stateful.enter.bind(stateful));
+            return typeof fn !== 'function' ? fn : fn.bind(stateful.proxy, stateful.enter.bind(stateful));
         }
         
         // Highest priority: shared/common properties.
