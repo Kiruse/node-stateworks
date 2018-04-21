@@ -1,0 +1,23 @@
+{
+	"name": "stateworks",
+	"version": "1.0.0",
+	"description": "A simple Stateful object similar in use to Promises!",
+	"keywords": [
+		"stateful"
+	],
+	"homepage": "https://github.com/Kiruse/node-stateworks",
+	"issues": "https://github.com/Kiruse/node-stateworks/issues",
+	"license": "GPL-3.0",
+	"author": "Kiruse",
+	"main": "main",
+	"engines": {
+		"node": ">4.0"
+	},
+	"devDependencies": {
+		"mocha": "^5.1.1"
+	},
+	"repository": "github:Kiruse/node-stateworks",
+	"scripts": {
+		"test": "mocha"
+	}
+}
