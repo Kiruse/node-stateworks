@@ -68,11 +68,13 @@ Object.assign(Stateful.prototype, {
         
         
         var oldState = this.states[this.currentState];
+        var oldStateName = this.currentState;
         var oldName  = this.currentState;
         this.currentState = statename;
         var newState = this.states[this.currentState];
+        var newStateName = this.currentState;
         
-        this.transitionHandler(oldState, newState);
+        this.transitionHandler(oldStateName, oldState, newStateName, newState);
         
         return this;
     },
