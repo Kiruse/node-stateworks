@@ -106,3 +106,40 @@ it('should support shared properties', function(done) {
 	
 	done();
 });
+
+it('should call custom transition handler', function(done) {
+	var numCalls = 0;
+	
+	var stateful = new Stateful((interface) => {
+		interface.addStates({
+			start: {
+				foo (enter) {
+					enter('intermediate');
+				}
+			},
+			intermediate: {
+				foo (enter) {
+					enter('final');
+				}
+			},
+			final: {
+				foo () {}
+			}
+		})
+		.enter('start')
+		.setTransitionHandler((oldStateName, oldState, newStateName, newState) => {
+			++numCalls;
+		});
+	});
+	
+	stateful.foo();
+	assert.strictEqual(numCalls, 1);
+	
+	stateful.foo();
+	assert.strictEqual(numCalls, 2);
+	
+	stateful.foo();
+	assert.strictEqual(numCalls, 2);
+	
+	done();
+});

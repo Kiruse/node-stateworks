@@ -80,7 +80,7 @@ Object.assign(Stateful.prototype, {
     },
     
     setTransitionHandler (handler) {
-        transitionHandler = handler;
+        this.transitionHandler = handler;
         return this;
     }
 });
