@@ -158,8 +158,27 @@ function InvalidStateError(state) {
     return err;
 }
 
-InvalidStateError.prototype = Object.create(Error.prototype);
+InvalidStateError.prototype = Object.create(Error.prototype, {
+    constructor: { value: InvalidStateError, enumerable: false, writable: true, configurable: true }
+});
+
+function InvalidOperationError(operation, state) {
+    var err = Error.call(this, operation + ' in state ' + state);
+    err.name = 'InvalidOperationError';
+    
+    var stack = err.stack.split("\n");
+    stack.splice(1, 1);
+    err.stack = stack.join("\n");
+    
+    err.__proto__ = InvalidOperationError.prototype;
+    return err;
+}
+
+InvalidOperationError.prototype = Object.create(Error.prototype, {
+    constructor: { value: InvalidOperationError, enumerable: false, writable: true, configurable: true }
+});
 
 
 exports.Stateful = Stateful;
 exports.InvalidStateError = InvalidStateError;
+exports.InvalidOperationError = InvalidOperationError;
