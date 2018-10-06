@@ -38,6 +38,7 @@ Following is a simple example usage for Stateworks. See `test/test.js` for more.
                 }
             }
         })
+        .enter('foo');
     });
     
     console.log(stateful.foo(), stateful.foo(), stateful.foo());
