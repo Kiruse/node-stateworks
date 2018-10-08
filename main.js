@@ -1,186 +1,151 @@
 // Copyright (c) Kiruse 2018
 // License GNU GPL 3.0
 
-function Stateful(base, callback) {
-    if (arguments.length === 1) {
-        callback = base;
-        base = {};
-    }
-    
-    // Call the initializer of the stateful object.
-    callback.call(this, this);
-    
-    // Ensure we're in a valid starting state.
-    if (!(this.currentState in this.states)) throw new InvalidStateError(this.currentState);
-    
-    // Create the proxy which will gather its methods from the current and default states of the stateful.
-    var proxy = new Proxy(base, Object.assign({stateful: this}, traps));
-    
-    // Save it, cus we might need it. It's more or less private anyway.
-    this.proxy = proxy;
-    
-    // Return the stateful object.
-    return proxy;
-}
+const Emitter = require('events');
 
-Object.assign(Stateful.prototype, {
-    proxy: null, // Filled during construction.
-    states: {},
-    common: {}, // Properties shared across states. These have highest priority.
-    currentState: undefined,
-    defaultState: undefined,
-    transitionHandler (){},
-    
-    setCommon (properties) {
-        if (typeof properties === 'object') {
-            Object.assign(this.common, properties);
-        }
-        return this;
-    },
-    
-    addStates (states) {
-        if (typeof states === 'object') {
-            for (var statename in states) {
-                this.addState(statename, states[statename]);
+module.exports = function Stateful(init) {
+    let stateful = new StatefulInner();
+    let proxy = new Proxy(stateful, {
+        getOwnPropertyDescriptor(target, prop) {
+            return Reflect.getOwnPropertyDescriptor(target._common, prop) || Reflect.getOwnPropertyDescriptor(target._state, prop) || Reflect.getOwnPropertyDescriptor(target, prop);
+        },
+        
+        defineProperty(target, prop, desc) {
+            Reflect.defineProperty(target._state, prop, desc);
+        },
+        
+        has(target, prop) {
+            return Reflect.has(target._common, prop) || Reflect.has(target._state, prop) || Reflect.has(target, prop);
+        },
+        
+        get(target, prop) {
+            let value = undefined;
+            
+            if (prop in target._common) {
+                value = Reflect.get(target._common, prop);
             }
-        }
-        return this;
-    },
-
-    addState (statename, stateobject) {
-        if (typeof stateobject === 'object') {
-            this.states[statename] = stateobject;
-        }
-        return this;
-    },
+            else if (prop in target._state) {
+                value = Reflect.get(target._state, prop);
+            }
+            else if (prop in target) {
+                value = Reflect.get(target, prop);
+            }
+            
+            if (typeof value === 'function') {
+                return value.bind(target._proxy);
+            }
+            return value;
+        },
+        
+        set(target, prop, value) {
+            if (prop in target._common) {
+                Reflect.set(target._common, prop, value);
+            }
+            else if (prop in target) {
+                Reflect.set(target, prop, value);
+            }
+            else {
+                Reflect.set(target._state, prop, value);
+            }
+            return true;
+        },
+        
+        deleteProperty(target, prop) {
+            Reflect.deleteProperty(target._state, prop);
+        },
+        
+        ownKeys(target) {
+            return Reflect.ownKeys(target._common).concat(Reflect.ownKeys(target._state)).concat(Reflect.ownKeys(target))
+                .filter((curr, index, self) => {
+                    return self.indexOf(curr) === index;
+                });
+        },
+    });
     
-    default (statename) {
-        if (!(statename in this.states)) throw new InvalidStateError(statename);
-        
-        this.defaultState = String(statename);
-        if (!this.currentState) this.currentState = this.defaultState;
-        
-        return this;
-    },
+    Object.defineProperty(stateful, '_proxy', {
+        enumerable: false,
+        writable: false,
+        configurable: false,
+        value: proxy
+    });
     
-    enter (statename) {
-        if (!(statename in this.states)) throw new InvalidStateError(statename);
-        
-        
-        var oldState = this.states[this.currentState];
-        var oldStateName = this.currentState;
-        var oldName  = this.currentState;
-        this.currentState = statename;
-        var newState = this.states[this.currentState];
-        var newStateName = this.currentState;
-        
-        this.transitionHandler.call(this.proxy, oldStateName, oldState, newStateName, newState);
-        
-        return this;
-    },
-    
-    setTransitionHandler (handler) {
-        this.transitionHandler = handler;
-        return this;
+    if (init) {
+        stateful.enter(init);
     }
-});
-
-const traps = {
-    defineProperty (target, key, descriptor) {
-        return Reflect.defineProperty(this.stateful.states[this.stateful.currentState], key, descriptor);
-    },
-    getOwnPropertyDescriptor (target, key) {
-        if (key in this.stateful.common) {
-            return Reflect.getOwnPropertyDescriptor(this.stateful.common, key);
-        }
-        return Reflect.getOwnPropertyDescriptor(this.stateful.states[this.stateful.currentState], key);
-    },
-    has (target, key) {
-        return key in this.stateful.common || key in this.stateful.states[this.stateful.currentState] || key in this.stateful.states[this.stateful.defaultState];
-    },
-    get (target, key) {
-        const stateful = this.stateful;
-        
-        // Functions need to be rebound to the stateful or the stateful's target scope!
-        function alter(fn) {
-            return typeof fn !== 'function' ? fn : fn.bind(stateful.proxy, stateful.enter.bind(stateful));
-        }
-        
-        // Highest priority: shared/common properties.
-        if (key in stateful.common) {
-            return alter(stateful.common[key]);
-        }
-        
-        // Second priority: current state properties.
-        if (key in stateful.states[stateful.currentState]) {
-            return alter(stateful.states[stateful.currentState][key]);
-        }
-        
-        // Third priority: default state properties.
-        else if (stateful.defaultState && key in stateful.states[stateful.defaultState]) {
-            return alter(stateful.states[stateful.defaultState][key]);
-        }
-        
-        // Lowest priority: base object properties.
-        return target[key];
-    },
-    set (target, key, value) {
-        // Highest priority: shared/common properties
-        if (key in this.stateful.common) {
-            this.stateful.common[key] = value;
-        }
-        
-        // Otherwise: current state properties, even if they don't exist!
-        // NEVER modify the base object as this contradicts the design choice!
-        else {
-            this.stateful.states[this.stateful.currentState][key] = value;
-        }
-    },
-    deleteProperty (target, key) {
-        // One does not delete shared/common properties. One can set them to undefined, tho...
-        if (key in this.stateful.common) {
-            this.stateful.common[key] = undefined;
-        }
-        else {
-            delete this.stateful.states[this.stateful.currentState][key];
-        }
-    },
+    
+    return proxy;
 };
 
-
-function InvalidStateError(state) {
-    var err = Error.call(this, state);
-    err.name = 'InvalidStateError';
+class StatefulInner extends Emitter {
+    constructor() {
+        super();
+        
+        /**
+         * Currently active state. The proxy returned by the Stateful
+         * function has traps that expose the state's methods as our own.
+         * @type {Object}
+         */
+        this._state  = {};
+        
+        /**
+         * Properties of this Stateful that persist between state transitions.
+         * The traps of the proxy returned by Stateful prioritizes this object's
+         * properties.
+         * @type {Object}
+         */
+        this._common = {};
+        
+        /**
+         * The proxy object that provides our traps and allows us to do our magic.
+         * @type {Proxy}
+         */
+        this._proxy  = undefined;
+    }
     
-    var stack = err.stack.split("\n");
-    stack.splice(1, 1);
-    err.stack = stack.join("\n");
+    /**
+     * Enters a new state, emitting the `leave` and `enter` events respectively.
+     * @param {object} state State to enter.
+     * @chainable
+     */
+    enter(state) {
+        this.emit('leave', this._state);
+        this._state = state;
+        this.emit('enter', this._state);
+        return this._proxy;
+    }
     
-    err.__proto__ = InvalidStateError.prototype;
-    return err;
+    /**
+     * Creates a new proxy interface allowing us to configure the common properties
+     * shared across states of this Stateful.
+     * @return {Proxy} The proxy interface.
+     */
+    common() {
+        let stateful = this;
+        let proxy = new Proxy(this._common, {
+            has(target, prop) {
+                return Reflect.has(target, prop);
+            },
+            
+            get(target, prop) {
+                // If 'done' property was requested, we return to the stateful.
+                if (prop === 'done') return () => stateful;
+                
+                // We return the properties as chainable functions!
+                return value => {
+                    if (!arguments.length) return target[prop];
+                    target[prop] = value;
+                    return proxy;
+                };
+            },
+        });
+        return proxy;
+    }
+    
+    /**
+     * Gets the currently active state for reference.
+     * @return {Object}
+     */
+    state() {
+        return this._state;
+    }
 }
-
-InvalidStateError.prototype = Object.create(Error.prototype, {
-    constructor: { value: InvalidStateError, enumerable: false, writable: true, configurable: true }
-});
-
-function InvalidOperationError(operation, state) {
-    var err = Error.call(this, operation + ' in state ' + state);
-    err.name = 'InvalidOperationError';
-    
-    var stack = err.stack.split("\n");
-    stack.splice(1, 1);
-    err.stack = stack.join("\n");
-    
-    err.__proto__ = InvalidOperationError.prototype;
-    return err;
-}
-
-InvalidOperationError.prototype = Object.create(Error.prototype, {
-    constructor: { value: InvalidOperationError, enumerable: false, writable: true, configurable: true }
-});
-
-
-exports.Stateful = Stateful;
-exports.InvalidStateError = InvalidStateError;
-exports.InvalidOperationError = InvalidOperationError;
