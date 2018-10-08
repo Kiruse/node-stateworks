@@ -115,7 +115,7 @@ instead.
 The Stateful is an event emitter, hence all of the emitter's methods are exposed
 as well.
 
-## enter(*<object>* state_object)
+## enter(*object* state_object)
 
 Replaces the current active state and triggers respective events.
 
