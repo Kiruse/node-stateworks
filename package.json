@@ -1,7 +1,7 @@
 {
 	"name": "stateworks",
 	"version": "2.0.0",
-	"description": "Make your objects stateful in seconds!",
+	"description": "Composable stateful objects",
 	"keywords": [
 		"stateful"
 	],
