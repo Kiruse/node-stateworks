@@ -58,7 +58,7 @@ module.exports = function stateful(initializer) {
     }
     
     if (typeof(initializer) === 'function') {
-        state = initializer(proxy, common, enter);
+        enter(initializer(proxy, common, enter));
     }
     
     return proxy;
