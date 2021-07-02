@@ -7,7 +7,7 @@
 	],
 	"homepage": "https://github.com/Kiruse/node-stateworks",
 	"issues": "https://github.com/Kiruse/node-stateworks/issues",
-	"license": "GPL-3.0",
+	"license": "MIT",
 	"author": "Kiruse",
 	"main": "main",
 	"engines": {
