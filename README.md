@@ -1,150 +1,143 @@
-# *UPDATE*
-
-Version 2.0 is a complete rewrite of the former Stateworks library!
-
-Although I had originally claimed that "I need something convenient and practical",
-I found it not to be nearly as practical or convenient as I had thought and hoped.
-In fact, it made a pure mess out of the resulting code. The new approach follows
-the same basic principle, but a different usage paradigm, and produces much cleaner
-code!
-
 # Node Stateworks
+*Stateworks* is a library to compose distinct objects into a single
+stateful.
 
-There are various finite state machines out there. After inspecting a couple of
-them, I decided most of them just are too close to the mathematical definition.
-I'm a programmer, not a mathematician. I need something convenient and
-practical. So, I wrote my own stateful class / wrapper.
+*Stateworks* leverages Proxy objects to conduct its magic. Accordingly, the constructor does not return a `Stateful` object, but a `Proxy` around a `StatefulCore` object. The resulting object is more or less a composition of a total of three objects: The `StatefulCore` (which is also an event emitter), the actual state, and the common properties object.
 
-Stateworks makes heavy use of Proxy objects. Accordingly, the constructor does
-not return a `Stateful` object, but a `Proxy` around a `StatefulInner` object.
-The resulting object is more or less a composition of a total of three objects:
-The `StatefulInner` (which is also an event emitter), the actual state, and
-the common properties object.
+## Update v3
+*Stateworks* has been slightly redesigned to use closures instead. Its use is now much like `Promise`s. The `enter` method has effectively been removed from the Stateful object. The `stateful` function no longer takes the initial state as single argument, but an initializer function. See below for details.
 
 # Simple Example
+```javascript
+const stateful = require('stateworks');
 
-Following is a simple example usage for Stateworks. See `test/test.js` for more.
-
-    const Stateful = require('stateworks');
-    
-    class State1 {
+const mystateful = stateful((proxy, common, enter) => {
+    const state1 = {
         foo() {
-            this.enter(new State2());
+            enter(state2);
             return 'state1.foo';
         }
     };
-    
-    class State2 {
+    const state2 = {
         foo() {
-            this.enter(new State3());
+            enter(state3);
             return 'state2.foo';
         }
-    }
-    
-    class State3 {
+    };
+    const state3 = {
         foo() {
-            this.enter({}); // Essentially enters an empty / final / invalid state.
+            enter({}); // enter empty/terminal state - foo is no longer defined here
             return 'state3.foo';
+        }
+    };
+    return state1;
+});
+
+console.log(mystateful.foo(), mystateful.foo(), mystateful.foo());
+// output: state1.foo  state2.foo  state3.foo
+mystateful.foo(); // throws because 'undefined' is not callable
+```
+
+# 2-Layer System
+The Stateful object is composed of two objects: the *active state* object and the *common properties*. When transitioning with `enter` the *active state* changes, and thus dynamically the exposed properties along with it.
+
+When getting properties, the *common properties* take precedence. If the property does not exist on the *common properties* object, it is read from the *active state* object. If it doesn't exist there either, `undefined` is returned.
+
+Setting properties follows a very similar logic: if the property exists on the *common properties* object, its property is overridden; otherwise, the *active state*'s property is overridden.
+   
+Any method on either the *common properties* or the *active state* are bound to your Stateful object.
+
+**Note** that due to the dynamic nature of these stateful objects, it is impossible to standardize a stateful object's interface for TypeScript as a different state may expose entirely different properties. *Stateworks* is too generic for TypeScript's typing system, though you may define interfaces to describe the current state of the stateful.
+
+## Common Properties
+Common properties persist across state transitions. When assigning a value to a Stateful's property, if this property is *common*, it will be stored in the `common` object passed to the initializer. Otherwise, it will be stored in the active state. Thus, when transitioning into another state, this property will be rerouted by the Stateful proxy.
+
+**Example**
+```javascript
+const stateful = require('stateworks');
+
+const mystateful = stateful((proxy, common, enter) => {
+    Object.assign(common, {
+        foo: 'bar',
+        answer: 42,
+    })
+    
+    const state1 = {
+        state: 1,
+        ask() {
+            console.log(this.foo === 'bar'); // true
+            const answer = this.answer += 1;
+            enter(state2); // Note that this call already changes the active state
+            return answer;
+        }
+    };
+    const state2 = {
+        state: 2,
+        ask() {
+            console.log(this.foo === 'bar'); // true
+            const answer = this.answer += 2
+            enter(state3);
+            return answer;
+        }
+    };
+    const state3 = {
+        state: 3,
+        ask() {
+            console.log(this.foo === 'bar'); // true
+            return this.answer += 1;
         }
     }
     
-    var stateful = Stateful(new State1());
-    // alternatively:
-    stateful = Stateful().enter(new State1());
+    return state1;
+});
+
+console.log(mystateful.answer, mystateful.state); // 42 1
+console.log(mystateful.ask(), mystateful.state);  // 43 2
+console.log(mystateful.ask(), mystateful.state);  // 45 3
+console.log(mystateful.ask(), mystateful.state);  // 46 3
+```
+
+
+# Callbacks
+If your active state implements `onStateEnter` and `onStateLeave` methods, they will be called accordingly upon transitioning states. `this` will be bound to the Stateful proxy object.
+
+**Example**
+```javascript
+const stateful = require('stateworks');
+
+const mystateful = stateful((proxy, common, enter) => {
+    Object.assign(common, {
+        state: undefined,
+    });
     
-    console.log(stateful.foo(), stateful.foo(), stateful.foo());
-    // output: state1.foo  state2.foo  state3.foo
+    const state1 = {
+        onEnterState() {
+            this.state = 1;
+        },
+        onLeaveState() {
+            console.log('bye bye state 1');
+        },
+        next() {
+            enter(state2);
+        }
+    };
+    const state2 = {
+        onEnterState() {
+            this.state = 2;
+        },
+        next() {
+            enter(state1);
+        }
+    };
+    
+    return state1;
+});
 
-# Details / Caveat
+console.log(mystateful.state); // 1
+mystateful.next();
+console.log(mystateful.state); // 2
+mystateful.next();
+console.log(mystateful.state); // 1
+```
 
-The properties of the active state object are reflected onto the Stateful. As
-mentioned above, the Stateful is essentially a composition of three objects.
-When getting a property, it looks in these places in this order:
-
-1. **Common properties**
-   Persisting properties across state transitions.
-
-2. **Current state**
-   Properties of the active state.
-   
-3. **StatefulInner object**
-   This object provides the minimalistic interface of the Stateful objects needed
-   to manipulate the Stateful itself.
-   
-It is safe to assume that `this === stateful` in any of the methods called on
-the stateful object.
-
-
-# Stateful Interface
-
-## Events
-
-### enter
-
-Triggered when entering a new state. Usually back-to-back with a `leave` event.
-Receives the new state as sole argument.
-
-### leave
-
-Triggered when leaving a state in favor of a new one. Usually imminently before
-an `enter` event. Receives the old state as sole argument.
-
-## Properties
-
-The following properties exist on the internal stateful object. Usually you
-shouldn't have a need to access these specifically.
-
-### _proxy
-
-The proxy object which the constructor will return. Usually `this === this._proxy`
-when invoked inside a stateful method.
-
-Not enumerable, configurable, or writable.
-
-### _state
-
-Currently active state.
-
-### _common
-
-Holds the defined common properties. For convenience, prefer using `.common()`
-instead.
-
-## Methods
-
-The Stateful is an event emitter, hence all of the emitter's methods are exposed
-as well.
-
-## enter(*object* state_object)
-
-Replaces the current active state and triggers respective events.
-
-Chainable.
-
-## common()
-
-Takes no arguments.
-
-Retrieves another proxy object acting as an interface to access all common
-properties as getter/setter methods, whether they exist already or not.
-
-A special property `done` returns the associated stateful for the sake of method
-chaining.
-
-### Example
-
-    Stateful()
-        .common()
-            .hello('world')
-            .foo('bar')
-            .answer(42)
-        .done()
-        .enter({});
-
-## state()
-
-Takes no arguments.
-
-Retrieves the active state object. Essentially the same as accessing
-`stateful._state` directly. The method's purpose is solely to maintain coherency
-with `.common()`.
+**Note** that the state returned from the initializer will also trigger `onEnterState`.
