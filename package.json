@@ -9,7 +9,7 @@
 	"issues": "https://github.com/Kiruse/node-stateworks/issues",
 	"license": "MIT",
 	"author": "Kiruse",
-	"main": "main",
+	"main": "index",
 	"engines": {
 		"node": ">4.0"
 	},
